@@ -14,7 +14,7 @@ export const translations = {
     nav_crm: "CRM",
     nav_pomodoro: "Focus Timer",
     nav_tagline: "Personal Manager",
-    nav_data_local: "All data stored locally",
+    nav_data_local: "Data synced to cloud ☁️",
 
     // Header subtitles
     sub_dashboard: "Your life, at a glance",
@@ -186,7 +186,7 @@ export const translations = {
     nav_crm: "Liên hệ",
     nav_pomodoro: "Hẹn giờ tập trung",
     nav_tagline: "Quản lý cá nhân",
-    nav_data_local: "Dữ liệu lưu trên máy",
+    nav_data_local: "Dữ liệu được đồng bộ ☁️",
 
     // Header subtitles
     sub_dashboard: "Tổng quan cuộc sống của bạn",

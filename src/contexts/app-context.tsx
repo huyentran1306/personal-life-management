@@ -4,7 +4,18 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { Task, Habit, MoodEntry, JournalEntry, Expense, Contact, MoodType, TaskStatus, ExpenseCategory, PomodoroSession, PomodoroMode } from "@/types";
 import { generateId, todayStr } from "@/lib/utils";
 import { categorizeExpense } from "@/lib/smart-insights";
-import { MOCK_TASKS, MOCK_HABITS, MOCK_MOOD, MOCK_JOURNAL, MOCK_EXPENSES, MOCK_CONTACTS } from "@/lib/mock-data";
+import {
+  ensureUserId, getStoredUserId,
+  getTasks, createTask, updateTask as apiUpdateTask, deleteTask as apiDeleteTask,
+  getHabits, createHabit, updateHabit as apiUpdateHabit, deleteHabit as apiDeleteHabit,
+  completeHabit, uncompleteHabit,
+  getMood, logMood as apiLogMood, deleteMood,
+  getJournal, saveJournal,
+  getExpenses, createExpense, deleteExpense as apiDeleteExpense,
+  getContacts, createContact, updateContact as apiUpdateContact, deleteContact as apiDeleteContact,
+  addContactNote as apiAddContactNote,
+  getPomodoro, createPomodoro,
+} from "@/lib/api";
 
 interface AppContextType {
   // Tasks
@@ -48,182 +59,213 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-function useLocalStorage<T>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [value, setValue] = useState<T>(initial);
-
-  // Load from localStorage after mount (avoids SSR hydration mismatch)
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(key);
-      if (stored) setValue(JSON.parse(stored));
-    } catch {/* noop */}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-
-  // Persist to localStorage on change
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {/* noop */}
-  }, [key, value]);
-
-  return [value, setValue];
-}
-
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [tasks, setTasks] = useLocalStorage<Task[]>("plm-tasks", MOCK_TASKS);
-  const [habits, setHabits] = useLocalStorage<Habit[]>("plm-habits", MOCK_HABITS);
-  const [moodEntries, setMoodEntries] = useLocalStorage<MoodEntry[]>("plm-mood", MOCK_MOOD);
-  const [journalEntries, setJournal] = useLocalStorage<JournalEntry[]>("plm-journal", MOCK_JOURNAL);
-  const [expenses, setExpenses] = useLocalStorage<Expense[]>("plm-expenses", MOCK_EXPENSES);
-  const [contacts, setContacts] = useLocalStorage<Contact[]>("plm-contacts", MOCK_CONTACTS);
-  const [pomodoroSessions, setPomodoroSessions] = useLocalStorage<PomodoroSession[]>("plm-pomodoro", []);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
+  const [journalEntries, setJournal] = useState<JournalEntry[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [pomodoroSessions, setPomodoroSessions] = useState<PomodoroSession[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // ─── Bootstrap: ensure user & load all data ───────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const uid = await ensureUserId();
+        setUserId(uid);
+        const [t, h, m, j, e, c] = await Promise.all([
+          getTasks(uid) as Promise<Task[]>,
+          getHabits(uid) as Promise<(Habit & { completed_dates: string[] })[]>,
+          getMood(uid) as Promise<MoodEntry[]>,
+          getJournal(uid) as Promise<JournalEntry[]>,
+          getExpenses(uid) as Promise<Expense[]>,
+          getContacts(uid) as Promise<Contact[]>,
+        ]);
+        setTasks(t || []);
+        setHabits((h || []).map((habit) => ({
+          ...habit,
+          completedDates: habit.completed_dates || [],
+        })));
+        setMoodEntries((m || []).map((entry: MoodEntry & { note?: string }) => ({
+          ...entry,
+          note: entry.note || '',
+        })));
+        setJournal((j || []).map((entry: JournalEntry & { summary?: string }) => ({
+          ...entry,
+          autoSummary: entry.summary || '',
+        })));
+        setExpenses(e || []);
+        setContacts((c || []).map((contact: Contact & { notes?: { id: string; content: string; createdAt: string }[] }) => ({
+          ...contact,
+          notes: (contact.notes || []).map((n) => ({ id: n.id, content: n.content, createdAt: n.createdAt })),
+        })));
+        try {
+          const p = await getPomodoro(uid) as PomodoroSession[];
+          setPomodoroSessions(p || []);
+        } catch {/* pomodoro not critical */}
+      } catch {
+        // API unavailable — app still works with empty state
+      }
+    })();
+  }, []);
+
+  const getUid = useCallback(() => userId || getStoredUserId() || '', [userId]);
 
   // ─── Tasks ────────────────────────────────────────────────────────────────
-  const addTask = useCallback((t: Omit<Task, "id" | "createdAt">) => {
-    setTasks((prev) => [...prev, { ...t, id: generateId(), createdAt: new Date().toISOString() }]);
-  }, [setTasks]);
+  const addTask = useCallback(async (t: Omit<Task, "id" | "createdAt">) => {
+    const uid = getUid();
+    const optimistic: Task = { ...t, id: generateId(), createdAt: new Date().toISOString() };
+    setTasks((prev) => [...prev, optimistic]);
+    try {
+      const created = await createTask({ ...t, user_id: uid }) as Task;
+      setTasks((prev) => prev.map((x) => (x.id === optimistic.id ? created : x)));
+    } catch {/* keep optimistic */}
+  }, [getUid]);
 
-  const updateTask = useCallback((id: string, updates: Partial<Task>) => {
+  const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
-  }, [setTasks]);
+    try { await apiUpdateTask(id, updates); } catch {/* keep optimistic */}
+  }, []);
 
-  const deleteTask = useCallback((id: string) => {
+  const deleteTask = useCallback(async (id: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== id));
-  }, [setTasks]);
+    try { await apiDeleteTask(id); } catch {/* keep optimistic */}
+  }, []);
 
-  const toggleTaskStatus = useCallback((id: string) => {
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== id) return t;
-        const newStatus: TaskStatus = t.status === "done" ? "todo" : "done";
-        return {
-          ...t,
-          status: newStatus,
-          completedAt: newStatus === "done" ? new Date().toISOString() : undefined,
-        };
-      })
-    );
-  }, [setTasks]);
+  const toggleTaskStatus = useCallback(async (id: string) => {
+    let newStatus: TaskStatus = 'todo';
+    setTasks((prev) => prev.map((t) => {
+      if (t.id !== id) return t;
+      newStatus = t.status === 'done' ? 'todo' : 'done';
+      return { ...t, status: newStatus, completedAt: newStatus === 'done' ? new Date().toISOString() : undefined };
+    }));
+    try { await apiUpdateTask(id, { status: newStatus }); } catch {/* keep optimistic */}
+  }, []);
 
   // ─── Habits ───────────────────────────────────────────────────────────────
-  const addHabit = useCallback((h: Omit<Habit, "id" | "createdAt" | "streak" | "completedDates">) => {
-    setHabits((prev) => [
-      ...prev,
-      { ...h, id: generateId(), streak: 0, completedDates: [], createdAt: new Date().toISOString() },
-    ]);
-  }, [setHabits]);
+  const addHabit = useCallback(async (h: Omit<Habit, "id" | "createdAt" | "streak" | "completedDates">) => {
+    const uid = getUid();
+    const optimistic: Habit = { ...h, id: generateId(), streak: 0, completedDates: [], createdAt: new Date().toISOString() };
+    setHabits((prev) => [...prev, optimistic]);
+    try {
+      const created = await createHabit({ ...h, user_id: uid }) as Habit & { completed_dates: string[] };
+      setHabits((prev) => prev.map((x) => (x.id === optimistic.id ? { ...created, completedDates: created.completed_dates || [] } : x)));
+    } catch {/* keep optimistic */}
+  }, [getUid]);
 
-  const toggleHabitToday = useCallback((id: string) => {
-    const today = todayStr();
-    setHabits((prev) =>
-      prev.map((h) => {
-        if (h.id !== id) return h;
-        const done = h.completedDates.includes(today);
-        const newDates = done
-          ? h.completedDates.filter((d) => d !== today)
-          : [...h.completedDates, today];
+  const toggleHabitToday = useCallback(async (id: string) => {
+    const uid = getUid();
+    const todayDate = todayStr();
+    let wasDone = false;
+    setHabits((prev) => prev.map((h) => {
+      if (h.id !== id) return h;
+      wasDone = h.completedDates.includes(todayDate);
+      const newDates = wasDone
+        ? h.completedDates.filter((d) => d !== todayDate)
+        : [...h.completedDates, todayDate];
+      let streak = 0;
+      const d = new Date();
+      for (let i = 0; i < 365; i++) {
+        const s = d.toISOString().split('T')[0];
+        if (newDates.includes(s)) { streak++; d.setDate(d.getDate() - 1); } else break;
+      }
+      return { ...h, completedDates: newDates, streak };
+    }));
+    try {
+      if (wasDone) { await uncompleteHabit(id, todayDate); }
+      else { await completeHabit(id, uid, todayDate); }
+    } catch {/* keep optimistic */}
+  }, [getUid]);
 
-        // Recalculate streak
-        let streak = 0;
-        const d = new Date();
-        for (let i = 0; i < 365; i++) {
-          const s = d.toISOString().split("T")[0];
-          if (newDates.includes(s)) {
-            streak++;
-            d.setDate(d.getDate() - 1);
-          } else break;
-        }
-
-        return { ...h, completedDates: newDates, streak };
-      })
-    );
-  }, [setHabits]);
-
-  const deleteHabit = useCallback((id: string) => {
+  const deleteHabit = useCallback(async (id: string) => {
     setHabits((prev) => prev.filter((h) => h.id !== id));
-  }, [setHabits]);
+    try { await apiDeleteHabit(id); } catch {/* keep optimistic */}
+  }, []);
 
   // ─── Mood ─────────────────────────────────────────────────────────────────
-  const addMoodEntry = useCallback((mood: MoodType, note: string) => {
+  const addMoodEntry = useCallback(async (mood: MoodType, note: string) => {
+    const uid = getUid();
     const today = todayStr();
+    const optimistic: MoodEntry = { id: generateId(), mood, note, date: today, createdAt: new Date().toISOString() };
     setMoodEntries((prev) => {
       const existing = prev.find((m) => m.date === today);
-      if (existing) {
-        return prev.map((m) =>
-          m.date === today ? { ...m, mood, note, createdAt: new Date().toISOString() } : m
-        );
-      }
-      return [...prev, { id: generateId(), mood, note, date: today, createdAt: new Date().toISOString() }];
+      if (existing) return prev.map((m) => m.date === today ? { ...m, mood, note } : m);
+      return [...prev, optimistic];
     });
-  }, [setMoodEntries]);
+    try { await apiLogMood({ user_id: uid, mood, note, date: today }); } catch {/* keep optimistic */}
+  }, [getUid]);
 
-  const updateMoodEntry = useCallback((id: string, mood: MoodType, note: string) => {
+  const updateMoodEntry = useCallback(async (id: string, mood: MoodType, note: string) => {
     setMoodEntries((prev) => prev.map((m) => (m.id === id ? { ...m, mood, note } : m)));
-  }, [setMoodEntries]);
+    try { await apiLogMood({ mood, note }); } catch {/* keep optimistic */}
+  }, []);
 
   // ─── Journal ──────────────────────────────────────────────────────────────
-  const saveJournalEntry = useCallback((date: string, content: string, autoSummary: string) => {
+  const saveJournalEntry = useCallback(async (date: string, content: string, autoSummary: string) => {
+    const uid = getUid();
     setJournal((prev) => {
       const existing = prev.find((j) => j.date === date);
-      if (existing) {
-        return prev.map((j) =>
-          j.date === date ? { ...j, content, autoSummary, updatedAt: new Date().toISOString() } : j
-        );
-      }
-      return [
-        ...prev,
-        { id: generateId(), date, content, autoSummary, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-      ];
+      if (existing) return prev.map((j) => j.date === date ? { ...j, content, autoSummary, updatedAt: new Date().toISOString() } : j);
+      return [...prev, { id: generateId(), date, content, autoSummary, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }];
     });
-  }, [setJournal]);
+    try { await saveJournal({ user_id: uid, date, content, summary: autoSummary }); } catch {/* keep optimistic */}
+  }, [getUid]);
 
   // ─── Expenses ─────────────────────────────────────────────────────────────
-  const addExpense = useCallback((amount: number, note: string, date?: string) => {
+  const addExpense = useCallback(async (amount: number, note: string, date?: string) => {
+    const uid = getUid();
     const category = categorizeExpense(note) as ExpenseCategory;
-    setExpenses((prev) => [
-      ...prev,
-      { id: generateId(), amount, note, category, date: date || todayStr(), createdAt: new Date().toISOString() },
-    ]);
-  }, [setExpenses]);
+    const expDate = date || todayStr();
+    const optimistic: Expense = { id: generateId(), amount, note, category, date: expDate, createdAt: new Date().toISOString() };
+    setExpenses((prev) => [...prev, optimistic]);
+    try {
+      const created = await createExpense({ user_id: uid, amount, note, category, date: expDate }) as Expense;
+      setExpenses((prev) => prev.map((x) => (x.id === optimistic.id ? created : x)));
+    } catch {/* keep optimistic */}
+  }, [getUid]);
 
-  const deleteExpense = useCallback((id: string) => {
+  const deleteExpense = useCallback(async (id: string) => {
     setExpenses((prev) => prev.filter((e) => e.id !== id));
-  }, [setExpenses]);
+    try { await apiDeleteExpense(id); } catch {/* keep optimistic */}
+  }, []);
 
   // ─── Contacts ─────────────────────────────────────────────────────────────
-  const addContact = useCallback((c: Omit<Contact, "id" | "createdAt" | "notes">) => {
-    setContacts((prev) => [
-      ...prev,
-      { ...c, id: generateId(), notes: [], createdAt: new Date().toISOString() },
-    ]);
-  }, [setContacts]);
+  const addContact = useCallback(async (c: Omit<Contact, "id" | "createdAt" | "notes">) => {
+    const uid = getUid();
+    const optimistic: Contact = { ...c, id: generateId(), notes: [], createdAt: new Date().toISOString() };
+    setContacts((prev) => [...prev, optimistic]);
+    try {
+      const created = await createContact({ ...c, user_id: uid }) as Contact;
+      setContacts((prev) => prev.map((x) => (x.id === optimistic.id ? { ...created, notes: [] } : x)));
+    } catch {/* keep optimistic */}
+  }, [getUid]);
 
-  const updateContact = useCallback((id: string, updates: Partial<Contact>) => {
+  const updateContact = useCallback(async (id: string, updates: Partial<Contact>) => {
     setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
-  }, [setContacts]);
+    try { await apiUpdateContact(id, updates); } catch {/* keep optimistic */}
+  }, []);
 
-  const deleteContact = useCallback((id: string) => {
+  const deleteContact = useCallback(async (id: string) => {
     setContacts((prev) => prev.filter((c) => c.id !== id));
-  }, [setContacts]);
+    try { await apiDeleteContact(id); } catch {/* keep optimistic */}
+  }, []);
 
-  const addContactNote = useCallback((contactId: string, content: string) => {
-    setContacts((prev) =>
-      prev.map((c) =>
-        c.id === contactId
-          ? { ...c, notes: [...c.notes, { id: generateId(), content, createdAt: new Date().toISOString() }] }
-          : c
-      )
-    );
-  }, [setContacts]);
+  const addContactNote = useCallback(async (contactId: string, content: string) => {
+    const uid = getUid();
+    const note = { id: generateId(), content, createdAt: new Date().toISOString() };
+    setContacts((prev) => prev.map((c) => c.id === contactId ? { ...c, notes: [...c.notes, note] } : c));
+    try { await apiAddContactNote(contactId, { user_id: uid, content }); } catch {/* keep optimistic */}
+  }, [getUid]);
 
   // ─── Pomodoro ─────────────────────────────────────────────────────────────
-  const addPomodoroSession = useCallback((mode: PomodoroMode, duration: number, completed: boolean, taskId?: string) => {
-    setPomodoroSessions((prev) => [
-      ...prev,
-      { id: generateId(), date: todayStr(), mode, duration, completed, taskId, createdAt: new Date().toISOString() },
-    ]);
-  }, [setPomodoroSessions]);
+  const addPomodoroSession = useCallback(async (mode: PomodoroMode, duration: number, completed: boolean, taskId?: string) => {
+    const uid = getUid();
+    const session: PomodoroSession = { id: generateId(), date: todayStr(), mode, duration, completed, taskId, createdAt: new Date().toISOString() };
+    setPomodoroSessions((prev) => [...prev, session]);
+    try { await createPomodoro({ user_id: uid, mode, duration, completed, task_id: taskId, date: todayStr() }); } catch {/* keep optimistic */}
+  }, [getUid]);
 
   return (
     <AppContext.Provider value={{
@@ -245,3 +287,4 @@ export function useApp() {
   if (!ctx) throw new Error("useApp must be used within AppProvider");
   return ctx;
 }
+
