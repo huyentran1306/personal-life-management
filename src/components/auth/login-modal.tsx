@@ -42,7 +42,8 @@ export function LoginModal({ onLogin, onRegister }: LoginModalProps) {
   const GOOGLE_OAUTH_URL = "https://d1-template.trann46698.workers.dev/api/auth/google";
 
   const handleGoogleLogin = () => {
-    window.location.href = GOOGLE_OAUTH_URL;
+    const appUrl = window.location.origin;
+    window.location.href = `${GOOGLE_OAUTH_URL}?app_url=${encodeURIComponent(appUrl)}`;
   };
 
   return (
