@@ -5,7 +5,7 @@ import { Task, Habit, MoodEntry, JournalEntry, Expense, Contact, MoodType, TaskS
 import { generateId, todayStr } from "@/lib/utils";
 import { categorizeExpense } from "@/lib/smart-insights";
 import {
-  ensureUserId, getStoredUserId,
+  ensureUserId, getStoredUserId, setStoredUserId,
   getTasks, createTask, updateTask as apiUpdateTask, deleteTask as apiDeleteTask,
   getHabits, createHabit, updateHabit as apiUpdateHabit, deleteHabit as apiDeleteHabit,
   completeHabit, uncompleteHabit,
@@ -15,9 +15,17 @@ import {
   getContacts, createContact, updateContact as apiUpdateContact, deleteContact as apiDeleteContact,
   addContactNote as apiAddContactNote,
   getPomodoro, createPomodoro,
+  authLogin, authRegister, AuthUser,
 } from "@/lib/api";
 
 interface AppContextType {
+  // Auth
+  currentUser: AuthUser | null;
+  isAuthenticated: boolean;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string, displayName?: string) => Promise<void>;
+  logout: () => void;
+
   // Tasks
   tasks: Task[];
   addTask: (t: Omit<Task, "id" | "createdAt">) => void;
@@ -59,7 +67,18 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
+const AUTH_USER_KEY = 'plm-auth-user';
+
+function loadStoredAuthUser(): AuthUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(AUTH_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
@@ -69,47 +88,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pomodoroSessions, setPomodoroSessions] = useState<PomodoroSession[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // ─── Bootstrap: ensure user & load all data ───────────────────────────────
+  const loadUserData = useCallback(async (uid: string) => {
+    const [t, h, m, j, e, c] = await Promise.all([
+      getTasks(uid) as Promise<Task[]>,
+      getHabits(uid) as Promise<(Habit & { completed_dates: string[] })[]>,
+      getMood(uid) as Promise<MoodEntry[]>,
+      getJournal(uid) as Promise<JournalEntry[]>,
+      getExpenses(uid) as Promise<Expense[]>,
+      getContacts(uid) as Promise<Contact[]>,
+    ]);
+    setTasks(t || []);
+    setHabits((h || []).map((habit) => ({ ...habit, completedDates: habit.completed_dates || [] })));
+    setMoodEntries((m || []).map((entry: MoodEntry & { note?: string }) => ({ ...entry, note: entry.note || '' })));
+    setJournal((j || []).map((entry: JournalEntry & { summary?: string }) => ({ ...entry, autoSummary: entry.summary || '' })));
+    setExpenses(e || []);
+    setContacts((c || []).map((contact: Contact & { notes?: { id: string; content: string; createdAt: string }[] }) => ({
+      ...contact,
+      notes: (contact.notes || []).map((n) => ({ id: n.id, content: n.content, createdAt: n.createdAt })),
+    })));
+    try { const p = await getPomodoro(uid) as PomodoroSession[]; setPomodoroSessions(p || []); } catch {/* not critical */}
+  }, []);
+
+  const persistUser = (user: AuthUser) => {
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    setStoredUserId(user.id);
+    setCurrentUser(user);
+    setUserId(user.id);
+  };
+
+  const login = useCallback(async (username: string, password: string) => {
+    const user = await authLogin(username, password);
+    persistUser(user);
+    await loadUserData(user.id);
+  }, [loadUserData]);
+
+  const register = useCallback(async (username: string, password: string, displayName?: string) => {
+    const user = await authRegister(username, password, displayName);
+    persistUser(user);
+    await loadUserData(user.id);
+  }, [loadUserData]);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem('plm-uid');
+    setCurrentUser(null);
+    setUserId(null);
+    setTasks([]); setHabits([]); setMoodEntries([]); setJournal([]); setExpenses([]); setContacts([]); setPomodoroSessions([]);
+  }, []);
+
+  // ─── Bootstrap: restore session if exists ─────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
+        const storedUser = loadStoredAuthUser();
+        if (storedUser) {
+          setCurrentUser(storedUser);
+          setUserId(storedUser.id);
+          await loadUserData(storedUser.id);
+          return;
+        }
+        // Fallback: anonymous user (legacy)
         const uid = await ensureUserId();
         setUserId(uid);
-        const [t, h, m, j, e, c] = await Promise.all([
-          getTasks(uid) as Promise<Task[]>,
-          getHabits(uid) as Promise<(Habit & { completed_dates: string[] })[]>,
-          getMood(uid) as Promise<MoodEntry[]>,
-          getJournal(uid) as Promise<JournalEntry[]>,
-          getExpenses(uid) as Promise<Expense[]>,
-          getContacts(uid) as Promise<Contact[]>,
-        ]);
-        setTasks(t || []);
-        setHabits((h || []).map((habit) => ({
-          ...habit,
-          completedDates: habit.completed_dates || [],
-        })));
-        setMoodEntries((m || []).map((entry: MoodEntry & { note?: string }) => ({
-          ...entry,
-          note: entry.note || '',
-        })));
-        setJournal((j || []).map((entry: JournalEntry & { summary?: string }) => ({
-          ...entry,
-          autoSummary: entry.summary || '',
-        })));
-        setExpenses(e || []);
-        setContacts((c || []).map((contact: Contact & { notes?: { id: string; content: string; createdAt: string }[] }) => ({
-          ...contact,
-          notes: (contact.notes || []).map((n) => ({ id: n.id, content: n.content, createdAt: n.createdAt })),
-        })));
-        try {
-          const p = await getPomodoro(uid) as PomodoroSession[];
-          setPomodoroSessions(p || []);
-        } catch {/* pomodoro not critical */}
+        await loadUserData(uid);
       } catch {
         // API unavailable — app still works with empty state
       }
     })();
-  }, []);
+  }, [loadUserData]);
 
   const getUid = useCallback(() => userId || getStoredUserId() || '', [userId]);
 
@@ -269,6 +315,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AppContext.Provider value={{
+      currentUser, isAuthenticated: !!currentUser, login, register, logout,
       tasks, addTask, updateTask, deleteTask, toggleTaskStatus,
       habits, addHabit, toggleHabitToday, deleteHabit,
       moodEntries, addMoodEntry, updateMoodEntry,

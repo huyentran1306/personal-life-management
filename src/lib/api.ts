@@ -22,6 +22,36 @@ export const apiPut = <T = unknown>(path: string, body: unknown) =>
 export const apiDelete = <T = unknown>(path: string) =>
   apiFetch<T>(path, { method: 'DELETE' });
 
+// ─── Auth ─────────────────────────────────────────────────
+export interface AuthUser {
+  id: string;
+  username: string;
+  display_name: string;
+  email: string | null;
+  xp: number;
+  level: number;
+  streak: number;
+  coins: number;
+  language: string;
+  app_mode: string;
+}
+
+export async function authRegister(username: string, password: string, displayName?: string): Promise<AuthUser> {
+  return apiFetch<AuthUser>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ username, password, display_name: displayName || username }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export async function authLogin(username: string, password: string): Promise<AuthUser> {
+  return apiFetch<AuthUser>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 // ─── User ID management ───────────────────────────────────
 const UID_KEY = 'plm-uid';
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Globe } from "lucide-react";
+import { Bell, Globe, LogOut } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useApp } from "@/contexts/app-context";
@@ -23,7 +23,7 @@ const PAGE_TITLE_KEYS: Record<string, { title: string; subtitle: TranslationKey 
 
 export function Header() {
   const pathname = usePathname();
-  const { tasks, habits, moodEntries, expenses } = useApp();
+  const { tasks, habits, moodEntries, expenses, currentUser, logout } = useApp();
   const { locale, setLocale, t } = useLanguage();
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -56,6 +56,22 @@ export function Header() {
         <span className="hidden sm:block text-xs text-gray-500 font-mono">
           {formatDate(todayStr())}
         </span>
+
+        {/* User info + Logout */}
+        {currentUser && (
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:block text-xs font-mono" style={{ color: "#00f5ff" }}>
+              {currentUser.display_name || currentUser.username}
+            </span>
+            <button
+              onClick={logout}
+              className="p-1.5 rounded-lg transition-colors hover:bg-white/5"
+              title="Logout"
+            >
+              <LogOut size={14} className="text-gray-400 hover:text-red-400" />
+            </button>
+          </div>
+        )}
 
         {/* Language toggle */}
         <button
