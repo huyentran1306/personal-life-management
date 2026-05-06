@@ -4,9 +4,16 @@ import { useApp } from "@/contexts/app-context";
 import { LoginModal } from "@/components/auth/login-modal";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { usePathname } from "next/navigation";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, login, register } = useApp();
+  const pathname = usePathname();
+
+  // Allow auth-callback page to bypass auth check (it's handling the OAuth callback)
+  if (pathname === "/auth-callback") {
+    return <>{children}</>;
+  }
 
   if (!isAuthenticated) {
     return (

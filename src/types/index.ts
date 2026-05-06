@@ -78,6 +78,7 @@ export interface Contact {
   phone: string;
   company: string;
   avatar: string; // emoji or initials
+  birthday?: string; // ISO date string (YYYY-MM-DD)
   notes: ContactNote[];
   lastContactDate: string; // ISO date string
   reminderDays: number;

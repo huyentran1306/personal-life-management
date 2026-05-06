@@ -27,8 +27,20 @@ export default function ExpensesPage() {
   const [form, setForm] = useState({ amount: "", note: "", date: todayStr() });
   const [selectedMonth, setSelectedMonth] = useState<string>("all"); // "all" | "YYYY-MM"
 
+  // ─── Thousand separator helpers ───────────────────────────────────────────
+  function formatAmountDisplay(val: string): string {
+    const digits = val.replace(/[^\d]/g, "");
+    if (!digits) return "";
+    return Number(digits).toLocaleString("en-US");
+  }
+
+  function handleAmountChange(raw: string) {
+    const digits = raw.replace(/[^\d]/g, "");
+    setForm((f) => ({ ...f, amount: digits }));
+  }
+
   const handleAdd = () => {
-    const amt = parseFloat(form.amount);
+    const amt = parseFloat(form.amount.replace(/,/g, ""));
     if (!form.note.trim() || isNaN(amt) || amt <= 0) return;
     addExpense(amt, form.note, form.date);
     setForm({ amount: "", note: "", date: todayStr() });
@@ -144,8 +156,19 @@ export default function ExpensesPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">{t("amount")}</label>
-                <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                  placeholder="0.00" className="w-full px-3 py-2 rounded-lg text-sm" />
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatAmountDisplay(form.amount)}
+                    onChange={(e) => handleAmountChange(e.target.value)}
+                    placeholder="0"
+                    className="w-full px-3 py-2 rounded-lg text-sm pr-8"
+                  />
+                  {form.amount && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">₫</span>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">{t("date")}</label>

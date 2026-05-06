@@ -44,7 +44,7 @@ function AuthCallbackInner() {
         };
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(authUser));
         localStorage.setItem(UID_KEY, uid);
-        router.replace("/");
+        window.location.href = "/";
       })
       .catch((e: Error) => {
         setErrorMsg(e.message || "Failed to authenticate");

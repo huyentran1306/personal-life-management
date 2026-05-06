@@ -13,6 +13,10 @@ export const translations = {
     nav_expenses: "Expenses",
     nav_crm: "CRM",
     nav_pomodoro: "Focus Timer",
+    nav_goals: "Goals",
+    nav_calendar: "Calendar",
+    nav_games: "Games",
+    nav_achievements: "Achievements",
     nav_tagline: "Personal Manager",
     nav_data_local: "Data synced to cloud ☁️",
 
@@ -168,6 +172,18 @@ export const translations = {
     pomodoro_skipped_label: "Skipped",
     pomodoro_min: "{n} min",
 
+    // Theme
+    theme_dark: "Dark",
+    theme_light: "Light",
+    theme_toggle: "Toggle theme",
+
+    // Birthday
+    birthday: "Birthday",
+    birthday_upcoming: "🎂 Upcoming Birthdays",
+    birthday_in_days: "🎂 {name}'s birthday in {days} day(s)!",
+    birthday_today: "🎂 Today is {name}'s birthday! 🎉",
+    birthday_placeholder: "Select birthday (optional)",
+
     // Expense month filter
     expense_filter_label: "Filter by period",
     expense_all_time: "All Time",
@@ -185,6 +201,10 @@ export const translations = {
     nav_expenses: "Chi tiêu",
     nav_crm: "Liên hệ",
     nav_pomodoro: "Hẹn giờ tập trung",
+    nav_goals: "Mục tiêu",
+    nav_calendar: "Lịch",
+    nav_games: "Trò chơi",
+    nav_achievements: "Thành tích",
     nav_tagline: "Quản lý cá nhân",
     nav_data_local: "Dữ liệu được đồng bộ ☁️",
 
@@ -339,6 +359,18 @@ export const translations = {
     pomodoro_completed_label: "Hoàn thành",
     pomodoro_skipped_label: "Bỏ qua",
     pomodoro_min: "{n} phút",
+
+    // Theme
+    theme_dark: "Tối",
+    theme_light: "Sáng",
+    theme_toggle: "Đổi giao diện",
+
+    // Birthday
+    birthday: "Sinh nhật",
+    birthday_upcoming: "🎂 Sinh nhật sắp tới",
+    birthday_in_days: "🎂 Sinh nhật {name} còn {days} ngày nữa!",
+    birthday_today: "🎂 Hôm nay là sinh nhật {name}! 🎉",
+    birthday_placeholder: "Chọn ngày sinh (tùy chọn)",
 
     // Expense month filter
     expense_filter_label: "Lọc theo kỳ",

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/contexts/app-context";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, MessageSquare, Clock, AlertCircle, ChevronDown } from "lucide-react";
+import { Plus, Trash2, MessageSquare, Clock, AlertCircle, ChevronDown, Cake } from "lucide-react";
 import { formatDate, todayStr, daysBetween } from "@/lib/utils";
 import type { Contact } from "@/types";
 import { useLanguage } from "@/contexts/language-context";
@@ -25,6 +25,18 @@ function ContactCard({ contact, onDelete, onAddNote, onUpdate }: {
   const today = todayStr();
   const daysSince = daysBetween(contact.lastContactDate, today);
   const overdueReminder = daysSince >= contact.reminderDays;
+
+  // Birthday logic
+  let birthdayInfo: { daysUntil: number; isToday: boolean } | null = null;
+  if (contact.birthday) {
+    const [, bMonth, bDay] = contact.birthday.split("-").map(Number);
+    const thisYear = today.slice(0, 4);
+    const thisYearBday = `${thisYear}-${String(bMonth).padStart(2, "0")}-${String(bDay).padStart(2, "0")}`;
+    const nextYearBday = `${Number(thisYear) + 1}-${String(bMonth).padStart(2, "0")}-${String(bDay).padStart(2, "0")}`;
+    const bdate = thisYearBday >= today ? thisYearBday : nextYearBday;
+    const daysUntil = Math.round((new Date(bdate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24));
+    birthdayInfo = { daysUntil, isToday: daysUntil === 0 };
+  }
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -68,6 +80,23 @@ function ContactCard({ contact, onDelete, onAddNote, onUpdate }: {
               </span>
             ))}
           </div>
+
+          {/* Birthday badge */}
+          {birthdayInfo && (
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"
+                style={{
+                  background: birthdayInfo.isToday ? "rgba(255,149,0,0.2)" : birthdayInfo.daysUntil <= 7 ? "rgba(255,149,0,0.12)" : "rgba(100,116,139,0.1)",
+                  color: birthdayInfo.isToday ? "#ff9500" : birthdayInfo.daysUntil <= 7 ? "#ffa040" : "#94a3b8",
+                  border: `1px solid ${birthdayInfo.isToday ? "rgba(255,149,0,0.4)" : "rgba(255,149,0,0.2)"}`,
+                }}>
+                <Cake size={10} />
+                {birthdayInfo.isToday
+                  ? t("birthday_today", { name: "" }).replace(contact.name, "").trim() || "🎉 Happy Birthday!"
+                  : t("birthday_in_days", { name: "", days: birthdayInfo.daysUntil }).replace("'s", "").trim() || `in ${birthdayInfo.daysUntil}d`}
+              </span>
+            </div>
+          )}
 
           <AnimatePresence>
             {expanded && (
@@ -124,7 +153,7 @@ export default function CRMPage() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     name: "", email: "", phone: "", company: "", avatar: "👤",
-    lastContactDate: todayStr(), reminderDays: 14, tags: [] as string[],
+    birthday: "", lastContactDate: todayStr(), reminderDays: 14, tags: [] as string[],
   });
   const [tagInput, setTagInput] = useState("");
 
@@ -133,7 +162,7 @@ export default function CRMPage() {
   const handleAdd = () => {
     if (!form.name.trim()) return;
     addContact(form);
-    setForm({ name: "", email: "", phone: "", company: "", avatar: "👤", lastContactDate: todayStr(), reminderDays: 14, tags: [] });
+    setForm({ name: "", email: "", phone: "", company: "", avatar: "👤", birthday: "", lastContactDate: todayStr(), reminderDays: 14, tags: [] });
     setShowForm(false);
   };
 
@@ -204,6 +233,11 @@ export default function CRMPage() {
                 <input type="number" value={form.reminderDays} onChange={(e) => setForm({ ...form, reminderDays: parseInt(e.target.value) || 14 })}
                   className="w-full px-3 py-2 rounded-lg text-sm" min="1" max="365" />
               </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Cake size={11} /> {t("birthday")}</label>
+              <input type="date" value={form.birthday} onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg text-sm" placeholder={t("birthday_placeholder")} />
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">{t("tags")}</label>

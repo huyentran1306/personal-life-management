@@ -15,6 +15,10 @@ import {
   Zap,
   Menu,
   X,
+  Target,
+  CalendarDays,
+  Gamepad2,
+  Medal,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -30,6 +34,10 @@ const NAV_ITEMS: { href: string; labelKey: TranslationKey; icon: React.Component
   { href: "/expenses", labelKey: "nav_expenses", icon: DollarSign, color: "#ff6600" },
   { href: "/crm", labelKey: "nav_crm", icon: Users, color: "#00f5ff" },
   { href: "/pomodoro", labelKey: "nav_pomodoro", icon: Timer, color: "#ff0080" },
+  { href: "/goals", labelKey: "nav_goals", icon: Target, color: "#bf00ff" },
+  { href: "/calendar", labelKey: "nav_calendar", icon: CalendarDays, color: "#00f5ff" },
+  { href: "/games", labelKey: "nav_games", icon: Gamepad2, color: "#39ff14" },
+  { href: "/achievements", labelKey: "nav_achievements", icon: Medal, color: "#ffff00" },
 ];
 
 export function Sidebar() {
