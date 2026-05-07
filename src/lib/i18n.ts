@@ -17,6 +17,8 @@ export const translations = {
     nav_calendar: "Calendar",
     nav_games: "Games",
     nav_achievements: "Achievements",
+    nav_today: "Today",
+    nav_weekly_review: "Weekly Review",
     nav_tagline: "Personal Manager",
     nav_data_local: "Data synced to cloud ☁️",
 
@@ -205,6 +207,8 @@ export const translations = {
     nav_calendar: "Lịch",
     nav_games: "Trò chơi",
     nav_achievements: "Thành tích",
+    nav_today: "Hôm nay",
+    nav_weekly_review: "Tổng kết tuần",
     nav_tagline: "Quản lý cá nhân",
     nav_data_local: "Dữ liệu được đồng bộ ☁️",
 

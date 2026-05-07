@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Play, Pause, RotateCcw, Check, X, Flame, Target, Clock4, Zap, Maximize2, Minimize2 } from "lucide-react";
 import { useApp } from "@/contexts/app-context";
 import { useLanguage } from "@/contexts/language-context";
+import { useGamification } from "@/hooks/useGamification";
 import type { PomodoroMode } from "@/types";
 import { todayStr } from "@/lib/utils";
 
@@ -66,6 +67,7 @@ const NEBULAS = Array.from({ length: 4 }, (_, i) => ({
 export default function PomodoroPage() {
   const { tasks, pomodoroSessions, addPomodoroSession } = useApp();
   const { t } = useLanguage();
+  const { addXP } = useGamification();
   const [mode, setMode] = useState<ModeKey>("focus");
   const [secondsLeft, setSecondsLeft] = useState(MODE_CONFIG.focus.minutes * 60);
   const [running, setRunning] = useState(false);
@@ -96,7 +98,7 @@ export default function PomodoroPage() {
   }, [totalSeconds]);
 
   const handleComplete = useCallback((completed: boolean) => {
-    if (completed) { beep("complete"); setJustCompleted(true); setTimeout(() => setJustCompleted(false), 2500); }
+    if (completed) { beep("complete"); setJustCompleted(true); setTimeout(() => setJustCompleted(false), 2500); if (mode === "focus") addXP(25, "pomodoro"); }
     addPomodoroSession(mode, cfg.minutes, completed, selectedTaskId || undefined);
     setSecondsLeft(totalSeconds); setRunning(false);
     if (intervalRef.current) clearInterval(intervalRef.current);

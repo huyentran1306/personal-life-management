@@ -19,6 +19,8 @@ import {
   CalendarDays,
   Gamepad2,
   Medal,
+  Sun,
+  BarChart2,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -27,6 +29,7 @@ import type { TranslationKey } from "@/lib/i18n";
 
 const NAV_ITEMS: { href: string; labelKey: TranslationKey; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties; className?: string }>; color: string }[] = [
   { href: "/", labelKey: "nav_dashboard", icon: LayoutDashboard, color: "#00f5ff" },
+  { href: "/today", labelKey: "nav_today", icon: Sun, color: "#ffff00" },
   { href: "/tasks", labelKey: "nav_tasks", icon: CheckSquare, color: "#bf00ff" },
   { href: "/habits", labelKey: "nav_habits", icon: Repeat, color: "#39ff14" },
   { href: "/journal", labelKey: "nav_journal", icon: BookOpen, color: "#ff0080" },
@@ -38,6 +41,7 @@ const NAV_ITEMS: { href: string; labelKey: TranslationKey; icon: React.Component
   { href: "/calendar", labelKey: "nav_calendar", icon: CalendarDays, color: "#00f5ff" },
   { href: "/games", labelKey: "nav_games", icon: Gamepad2, color: "#39ff14" },
   { href: "/achievements", labelKey: "nav_achievements", icon: Medal, color: "#ffff00" },
+  { href: "/weekly-review", labelKey: "nav_weekly_review", icon: BarChart2, color: "#00f5ff" },
 ];
 
 export function Sidebar() {

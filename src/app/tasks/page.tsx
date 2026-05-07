@@ -7,6 +7,7 @@ import { Plus, Trash2, CheckCircle, Circle, Clock, AlertTriangle, ChevronDown } 
 import { formatDate, todayStr } from "@/lib/utils";
 import type { Task, Priority, TaskStatus } from "@/types";
 import { useLanguage } from "@/contexts/language-context";
+import { useGamification } from "@/hooks/useGamification";
 
 const PRIORITY_COLORS = {
   high: { color: "#ff0080", bg: "#ff008015" },
@@ -20,11 +21,12 @@ const STATUS_COLORS = {
   done: "#39ff14",
 };
 
-function TaskCard({ task, onToggle, onDelete, onUpdate }: {
+function TaskCard({ task, onToggle, onDelete, onUpdate, pomodoroMinutes }: {
   task: Task;
   onToggle: () => void;
   onDelete: () => void;
   onUpdate: (updates: Partial<Task>) => void;
+  pomodoroMinutes: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { t } = useLanguage();
@@ -69,13 +71,19 @@ function TaskCard({ task, onToggle, onDelete, onUpdate }: {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 mt-1.5">
+          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
             <span className="text-xs" style={{ color: STATUS_COLORS[task.status] }}>● {statusLabel(task.status)}</span>
             <span className={`flex items-center gap-1 text-xs ${isOverdue ? "text-red-400" : "text-gray-500"}`}>
               {isOverdue && <AlertTriangle size={10} />}
               <Clock size={10} />
               {formatDate(task.dueDate)}
             </span>
+            {pomodoroMinutes > 0 && (
+              <span className="flex items-center gap-1 text-xs" style={{ color: "#f472b6" }}>⏱️ {pomodoroMinutes}m focused</span>
+            )}
+            {task.repeat && task.repeat !== "none" && (
+              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(0,245,255,0.1)", color: "#00f5ff" }}>🔁 {task.repeat}</span>
+            )}
           </div>
 
           <AnimatePresence>
@@ -108,11 +116,12 @@ function TaskCard({ task, onToggle, onDelete, onUpdate }: {
 }
 
 export default function TasksPage() {
-  const { tasks, addTask, updateTask, deleteTask, toggleTaskStatus } = useApp();
+  const { tasks, addTask, updateTask, deleteTask, toggleTaskStatus, pomodoroSessions } = useApp();
   const { t } = useLanguage();
+  const { addXP } = useGamification();
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState<"all" | TaskStatus>("all");
-  const [form, setForm] = useState({ title: "", description: "", priority: "medium" as Priority, dueDate: todayStr(), status: "todo" as TaskStatus });
+  const [form, setForm] = useState({ title: "", description: "", priority: "medium" as Priority, dueDate: todayStr(), status: "todo" as TaskStatus, repeat: "none" as Task["repeat"] });
 
   const sorted = [...tasks]
     .filter((tk) => filter === "all" || tk.status === filter)
@@ -125,7 +134,7 @@ export default function TasksPage() {
   const handleAdd = () => {
     if (!form.title.trim()) return;
     addTask(form);
-    setForm({ title: "", description: "", priority: "medium", dueDate: todayStr(), status: "todo" });
+    setForm({ title: "", description: "", priority: "medium", dueDate: todayStr(), status: "todo", repeat: "none" });
     setShowForm(false);
   };
 
@@ -182,6 +191,16 @@ export default function TasksPage() {
                   className="w-full px-3 py-2 rounded-lg text-sm" />
               </div>
             </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">🔁 Repeat</label>
+              <select value={form.repeat} onChange={(e) => setForm({ ...form, repeat: e.target.value as Task["repeat"] })}
+                className="w-full px-3 py-2 rounded-lg text-sm">
+                <option value="none">No repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowForm(false)} className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors">{t("cancel")}</button>
               <button onClick={handleAdd} className="px-4 py-1.5 text-sm rounded-lg font-medium transition-all"
@@ -214,15 +233,21 @@ export default function TasksPage() {
               {t("no_tasks_found")}
             </motion.p>
           ) : (
-            sorted.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onToggle={() => toggleTaskStatus(task.id)}
-                onDelete={() => deleteTask(task.id)}
-                onUpdate={(u) => updateTask(task.id, u)}
-              />
-            ))
+            sorted.map((task) => {
+              const taskPomoMinutes = pomodoroSessions
+                .filter((s) => s.taskId === task.id && s.mode === "focus" && s.completed)
+                .reduce((sum, s) => sum + s.duration, 0);
+              return (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  pomodoroMinutes={taskPomoMinutes}
+                  onToggle={() => { const wasDone = task.status === "done"; toggleTaskStatus(task.id); if (!wasDone) addXP(20, "task"); }}
+                  onDelete={() => deleteTask(task.id)}
+                  onUpdate={(u) => updateTask(task.id, u)}
+                />
+              );
+            })
           )}
         </AnimatePresence>
       </div>

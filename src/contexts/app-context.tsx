@@ -50,7 +50,7 @@ interface AppContextType {
 
   // Expenses
   expenses: Expense[];
-  addExpense: (amount: number, note: string, date?: string) => void;
+  addExpense: (amount: number, note: string, date?: string, shared?: boolean, splitCount?: number) => void;
   deleteExpense: (id: string) => void;
 
   // Contacts
@@ -182,11 +182,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const toggleTaskStatus = useCallback(async (id: string) => {
     let newStatus: TaskStatus = 'todo';
-    setTasks((prev) => prev.map((t) => {
-      if (t.id !== id) return t;
-      newStatus = t.status === 'done' ? 'todo' : 'done';
-      return { ...t, status: newStatus, completedAt: newStatus === 'done' ? new Date().toISOString() : undefined };
-    }));
+    let recurringTask: Task | null = null;
+    setTasks((prev) => {
+      const next = prev.map((t) => {
+        if (t.id !== id) return t;
+        newStatus = t.status === 'done' ? 'todo' : 'done';
+        const updated = { ...t, status: newStatus, completedAt: newStatus === 'done' ? new Date().toISOString() : undefined };
+        // Create next recurring task
+        if (newStatus === 'done' && t.repeat && t.repeat !== 'none') {
+          const d = new Date(t.dueDate + 'T00:00:00');
+          if (t.repeat === 'daily') d.setDate(d.getDate() + 1);
+          else if (t.repeat === 'weekly') d.setDate(d.getDate() + 7);
+          else if (t.repeat === 'monthly') d.setMonth(d.getMonth() + 1);
+          recurringTask = { ...t, id: generateId(), status: 'todo', dueDate: d.toISOString().split('T')[0], completedAt: undefined, createdAt: new Date().toISOString() };
+        }
+        return updated;
+      });
+      return recurringTask ? [...next, recurringTask] : next;
+    });
     try { await apiUpdateTask(id, { status: newStatus }); } catch {/* keep optimistic */}
   }, []);
 
@@ -260,15 +273,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [getUid]);
 
   // ─── Expenses ─────────────────────────────────────────────────────────────
-  const addExpense = useCallback(async (amount: number, note: string, date?: string) => {
+  const addExpense = useCallback(async (amount: number, note: string, date?: string, shared?: boolean, splitCount?: number) => {
     const uid = getUid();
     const category = categorizeExpense(note) as ExpenseCategory;
     const expDate = date || todayStr();
-    const optimistic: Expense = { id: generateId(), amount, note, category, date: expDate, createdAt: new Date().toISOString() };
+    const optimistic: Expense = { id: generateId(), amount, note, category, date: expDate, createdAt: new Date().toISOString(), shared, splitCount };
     setExpenses((prev) => [...prev, optimistic]);
     try {
       const created = await createExpense({ user_id: uid, amount, note, category, date: expDate }) as Expense;
-      setExpenses((prev) => prev.map((x) => (x.id === optimistic.id ? created : x)));
+      setExpenses((prev) => prev.map((x) => (x.id === optimistic.id ? { ...created, shared, splitCount } : x)));
     } catch {/* keep optimistic */}
   }, [getUid]);
 

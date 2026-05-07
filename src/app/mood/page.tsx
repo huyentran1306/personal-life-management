@@ -8,6 +8,7 @@ import type { MoodType } from "@/types";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useState } from "react";
 import { useLanguage } from "@/contexts/language-context";
+import Link from "next/link";
 
 const MOODS: MoodType[] = ["amazing", "good", "neutral", "bad", "stressed"];
 
@@ -16,6 +17,7 @@ export default function MoodPage() {
   const { t } = useLanguage();
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState(false);
+  const [showJournalPrompt, setShowJournalPrompt] = useState(false);
   const today = todayStr();
   const todayEntry = moodEntries.find((m) => m.date === today);
   const [selected, setSelected] = useState<MoodType | null>(todayEntry?.mood || null);
@@ -32,6 +34,7 @@ export default function MoodPage() {
     if (!selected) return;
     addMoodEntry(selected, note);
     setSaved(true);
+    if (selected === "bad" || selected === "stressed") setShowJournalPrompt(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
@@ -94,6 +97,22 @@ export default function MoodPage() {
               }}>
               {saved ? t("mood_saved") : t("save_mood")}
             </button>
+            {showJournalPrompt && (
+              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                className="p-3 rounded-xl flex items-center justify-between"
+                style={{ background: "rgba(191,0,255,0.08)", border: "1px solid rgba(191,0,255,0.2)" }}>
+                <div>
+                  <p className="text-xs font-medium" style={{ color: "#bf00ff" }}>✍️ Want to write about it?</p>
+                  <p className="text-xs mt-0.5" style={{ color: "#6b8096" }}>Journaling can help process difficult feelings.</p>
+                </div>
+                <div className="flex gap-2 ml-3">
+                  <Link href="/journal" className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                    style={{ background: "rgba(191,0,255,0.15)", color: "#bf00ff" }}>Open Journal</Link>
+                  <button onClick={() => setShowJournalPrompt(false)} className="text-xs px-2 py-1.5 rounded-lg"
+                    style={{ color: "#6b8096" }}>✕</button>
+                </div>
+              </motion.div>
+            )}
           </motion.div>
         )}
       </motion.div>

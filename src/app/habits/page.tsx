@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useApp } from "@/contexts/app-context";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, Flame, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Trash2, Flame, CheckCircle2, XCircle, Grid3X3 } from "lucide-react";
 import { todayStr, getLast7Days, getDayLabel, daysAgo } from "@/lib/utils";
 import { useLanguage } from "@/contexts/language-context";
+import { useGamification } from "@/hooks/useGamification";
 
 const ICON_OPTIONS = ["💪", "📚", "🧘", "💧", "🏃", "🎯", "🎸", "🖊️", "🌿", "😴", "🥗", "🧠"];
 const COLOR_OPTIONS = ["#00f5ff", "#bf00ff", "#ff0080", "#39ff14", "#ffff00", "#ff6600"];
@@ -13,8 +14,10 @@ const COLOR_OPTIONS = ["#00f5ff", "#bf00ff", "#ff0080", "#39ff14", "#ffff00", "#
 export default function HabitsPage() {
   const { habits, addHabit, toggleHabitToday, deleteHabit } = useApp();
   const { t } = useLanguage();
+  const { addXP } = useGamification();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", icon: "💪", color: "#00f5ff" });
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const today = todayStr();
   const last7 = getLast7Days();
 
@@ -113,7 +116,7 @@ export default function HabitsPage() {
                   className="glass-card p-4"
                   style={{ borderColor: done ? habit.color + "30" : missedConsecutive ? "#ff008030" : "rgba(255,255,255,0.06)" }}>
                   <div className="flex items-start gap-3">
-                    <button onClick={() => toggleHabitToday(habit.id)}
+                    <button onClick={() => { const wasDone = habit.completedDates.includes(today); toggleHabitToday(habit.id); if (!wasDone) addXP(15, "habit"); }}
                       className="w-12 h-12 rounded-xl flex items-center justify-center text-xl transition-all shrink-0"
                       style={{
                         background: done ? habit.color + "20" : "rgba(255,255,255,0.04)",
@@ -165,6 +168,55 @@ export default function HabitsPage() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Habit Heatmap */}
+      {habits.length > 0 && (
+        <div>
+          <button onClick={() => setShowHeatmap(!showHeatmap)}
+            className="flex items-center gap-2 text-sm w-full px-4 py-2 rounded-xl transition-all"
+            style={{ background: showHeatmap ? "rgba(0,245,255,0.08)" : "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#6b8096" }}>
+            <Grid3X3 size={14} style={{ color: "#00f5ff" }} />
+            <span style={{ color: "#00f5ff" }}>Consistency Heatmap</span>
+            <span className="ml-auto text-xs">{showHeatmap ? "▲" : "▼"}</span>
+          </button>
+          <AnimatePresence>
+            {showHeatmap && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden mt-2">
+                <div className="glass-card p-4 space-y-4">
+                  {habits.map((habit) => {
+                    // Build 10 weeks (70 days) heatmap
+                    const cells: { date: string; done: boolean }[] = [];
+                    for (let i = 69; i >= 0; i--) {
+                      const d = new Date();
+                      d.setDate(d.getDate() - i);
+                      const dateStr = d.toISOString().split("T")[0];
+                      cells.push({ date: dateStr, done: habit.completedDates.includes(dateStr) });
+                    }
+                    const rate = Math.round((cells.filter((c) => c.done).length / cells.length) * 100);
+                    return (
+                      <div key={habit.id}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium" style={{ color: "#e2e8f0" }}>{habit.icon} {habit.name}</span>
+                          <span className="text-xs" style={{ color: habit.color }}>{rate}% / 70d</span>
+                        </div>
+                        <div className="flex gap-0.5 flex-wrap">
+                          {cells.map((cell) => (
+                            <div key={cell.date} title={cell.date}
+                              className="w-3 h-3 rounded-sm"
+                              style={{ background: cell.done ? habit.color + "cc" : "rgba(255,255,255,0.06)", boxShadow: cell.done ? `0 0 4px ${habit.color}60` : "none" }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }

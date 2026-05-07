@@ -98,6 +98,20 @@ function ContactCard({ contact, onDelete, onAddNote, onUpdate }: {
             </div>
           )}
 
+          {/* Follow-up badge */}
+          {contact.nextFollowup && (
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"
+                style={{
+                  background: contact.nextFollowup <= today ? "rgba(255,0,128,0.15)" : "rgba(255,102,0,0.1)",
+                  color: contact.nextFollowup <= today ? "#ff0080" : "#ff6600",
+                  border: `1px solid ${contact.nextFollowup <= today ? "rgba(255,0,128,0.3)" : "rgba(255,102,0,0.2)"}`,
+                }}>
+                📞 Follow-up: {contact.nextFollowup <= today ? "Overdue!" : contact.nextFollowup}
+              </span>
+            </div>
+          )}
+
           <AnimatePresence>
             {expanded && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
@@ -153,7 +167,7 @@ export default function CRMPage() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     name: "", email: "", phone: "", company: "", avatar: "👤",
-    birthday: "", lastContactDate: todayStr(), reminderDays: 14, tags: [] as string[],
+    birthday: "", nextFollowup: "", lastContactDate: todayStr(), reminderDays: 14, tags: [] as string[],
   });
   const [tagInput, setTagInput] = useState("");
 
@@ -162,7 +176,7 @@ export default function CRMPage() {
   const handleAdd = () => {
     if (!form.name.trim()) return;
     addContact(form);
-    setForm({ name: "", email: "", phone: "", company: "", avatar: "👤", birthday: "", lastContactDate: todayStr(), reminderDays: 14, tags: [] });
+    setForm({ name: "", email: "", phone: "", company: "", avatar: "👤", birthday: "", nextFollowup: "", lastContactDate: todayStr(), reminderDays: 14, tags: [] });
     setShowForm(false);
   };
 
@@ -238,6 +252,11 @@ export default function CRMPage() {
               <label className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Cake size={11} /> {t("birthday")}</label>
               <input type="date" value={form.birthday} onChange={(e) => setForm({ ...form, birthday: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg text-sm" placeholder={t("birthday_placeholder")} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">📞 Next Follow-up Date</label>
+              <input type="date" value={form.nextFollowup} onChange={(e) => setForm({ ...form, nextFollowup: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg text-sm" />
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">{t("tags")}</label>

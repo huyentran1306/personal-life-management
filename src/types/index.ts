@@ -11,6 +11,7 @@ export interface Task {
   dueDate: string; // ISO date string
   createdAt: string;
   completedAt?: string;
+  repeat?: "none" | "daily" | "weekly" | "monthly"; // recurring
 }
 
 // ─── Habit ────────────────────────────────────────────────────────────────────
@@ -62,6 +63,8 @@ export interface Expense {
   category: ExpenseCategory;
   date: string; // ISO date string
   createdAt: string;
+  shared?: boolean; // split expense
+  splitCount?: number; // number of people to split with
 }
 
 // ─── Contact (CRM) ────────────────────────────────────────────────────────────
@@ -79,6 +82,7 @@ export interface Contact {
   company: string;
   avatar: string; // emoji or initials
   birthday?: string; // ISO date string (YYYY-MM-DD)
+  nextFollowup?: string; // ISO date string for follow-up reminder
   notes: ContactNote[];
   lastContactDate: string; // ISO date string
   reminderDays: number;

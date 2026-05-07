@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/contexts/app-context";
 import { motion } from "framer-motion";
-import { BookOpen, ChevronLeft, ChevronRight, Save } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Save, Search, X } from "lucide-react";
 import { formatDate, todayStr } from "@/lib/utils";
 import { generateDailySummary } from "@/lib/smart-insights";
 import { useLanguage } from "@/contexts/language-context";
@@ -16,6 +16,7 @@ export default function JournalPage() {
     const entry = journalEntries.find((j) => j.date === todayStr());
     return entry?.content || "";
   });
+  const [searchQuery, setSearchQuery] = useState("");
 
   const currentEntry = journalEntries.find((j) => j.date === selectedDate);
 
@@ -39,8 +40,9 @@ export default function JournalPage() {
 
   const recentEntries = journalEntries
     .filter((j) => j.date !== selectedDate)
+    .filter((j) => !searchQuery || j.content.toLowerCase().includes(searchQuery.toLowerCase()) || j.autoSummary.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 5);
+    .slice(0, searchQuery ? 20 : 5);
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -91,9 +93,25 @@ export default function JournalPage() {
         )}
       </motion.div>
 
-      {recentEntries.length > 0 && (
+      {recentEntries.length > 0 || searchQuery ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="space-y-2">
-          <h3 className="text-xs text-gray-500 uppercase tracking-wider px-1">{t("recent_entries")}</h3>
+          {/* Search bar */}
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6b8096" }} />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search journal entries..."
+              className="w-full pl-8 pr-8 py-2 rounded-lg text-sm bg-black/40 border border-white/10 text-gray-200 focus:outline-none focus:border-purple-500/50"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "#6b8096" }}>
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          {!searchQuery && <h3 className="text-xs text-gray-500 uppercase tracking-wider px-1">{t("recent_entries")}</h3>}
+          {searchQuery && <h3 className="text-xs text-gray-500 px-1">{recentEntries.length} result{recentEntries.length !== 1 ? 's' : ''} for &ldquo;{searchQuery}&rdquo;</h3>}
           {recentEntries.map((entry) => (
             <button key={entry.id} onClick={() => { setSelectedDate(entry.date); setContent(entry.content); }}
               className="w-full text-left glass-card p-3 hover:border-purple-500/20 transition-all"
@@ -106,7 +124,7 @@ export default function JournalPage() {
             </button>
           ))}
         </motion.div>
-      )}
+      ) : null}
     </div>
   );
 }

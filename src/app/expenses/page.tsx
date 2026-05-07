@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useApp } from "@/contexts/app-context";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, TrendingUp, PieChart, ChevronDown } from "lucide-react";
+import { Plus, Trash2, TrendingUp, PieChart, Wallet } from "lucide-react";
 import { todayStr, getLast7Days, getDayLabel, currencyFormat } from "@/lib/utils";
 import type { ExpenseCategory } from "@/types";
 import { PieChart as RPieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from "recharts";
@@ -24,8 +24,14 @@ export default function ExpensesPage() {
   const { expenses, addExpense, deleteExpense } = useApp();
   const { t } = useLanguage();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ amount: "", note: "", date: todayStr() });
+  const [showBudget, setShowBudget] = useState(false);
+  const [form, setForm] = useState({ amount: "", note: "", date: todayStr(), shared: false, splitCount: 2 });
   const [selectedMonth, setSelectedMonth] = useState<string>("all"); // "all" | "YYYY-MM"
+  const [budgets, setBudgets] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(localStorage.getItem("plm-budgets") || "{}"); } catch { return {}; }
+  });
+  const [editBudget, setEditBudget] = useState<Record<string, string>>({});
 
   // ─── Thousand separator helpers ───────────────────────────────────────────
   function formatAmountDisplay(val: string): string {
@@ -42,9 +48,16 @@ export default function ExpensesPage() {
   const handleAdd = () => {
     const amt = parseFloat(form.amount.replace(/,/g, ""));
     if (!form.note.trim() || isNaN(amt) || amt <= 0) return;
-    addExpense(amt, form.note, form.date);
-    setForm({ amount: "", note: "", date: todayStr() });
+    addExpense(amt, form.note, form.date, form.shared, form.shared ? form.splitCount : undefined);
+    setForm({ amount: "", note: "", date: todayStr(), shared: false, splitCount: 2 });
     setShowForm(false);
+  };
+
+  const saveBudget = (cat: string, val: string) => {
+    const n = parseFloat(val);
+    const updated = { ...budgets, [cat]: isNaN(n) ? 0 : n };
+    setBudgets(updated);
+    localStorage.setItem("plm-budgets", JSON.stringify(updated));
   };
 
   // Generate available months from expense data
@@ -95,7 +108,11 @@ export default function ExpensesPage() {
     });
   }, [filteredExpenses, selectedMonth]);
 
-  const recent = [...filteredExpenses].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 20);
+  const recent = [...filteredExpenses].sort((a, b) => {
+    const da = a.createdAt ?? a.date ?? "";
+    const db = b.createdAt ?? b.date ?? "";
+    return db.localeCompare(da);
+  }).slice(0, 20);
 
   const monthLabel = (m: string) => {
     const [y, mo] = m.split("-");
@@ -184,6 +201,23 @@ export default function ExpensesPage() {
                 className="w-full px-3 py-2 rounded-lg text-sm" />
               <p className="text-xs text-gray-600 mt-1">{t("expense_hint")}</p>
             </div>
+            {/* Split expense */}
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={form.shared} onChange={(e) => setForm({ ...form, shared: e.target.checked })}
+                  className="w-4 h-4 rounded" />
+                <span className="text-xs text-gray-400">👥 Split expense</span>
+              </label>
+              {form.shared && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Split between</span>
+                  <input type="number" min={2} max={20} value={form.splitCount}
+                    onChange={(e) => setForm({ ...form, splitCount: parseInt(e.target.value) || 2 })}
+                    className="w-14 px-2 py-1 rounded-lg text-xs text-center" />
+                  <span className="text-xs text-gray-500">people → your share: <strong style={{ color: "#39ff14" }}>{currencyFormat((parseFloat(form.amount.replace(/,/g, "")) || 0) / form.splitCount)}</strong></span>
+                </div>
+              )}
+            </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowForm(false)} className="px-3 py-1.5 text-sm text-gray-400">{t("cancel")}</button>
               <button onClick={handleAdd} className="px-4 py-1.5 text-sm rounded-lg font-medium"
@@ -196,6 +230,56 @@ export default function ExpensesPage() {
       </AnimatePresence>
 
       <div className="grid md:grid-cols-2 gap-4">
+        {/* Budget section */}
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 }}
+          className="glass-card p-4 md:col-span-2">
+          <button onClick={() => setShowBudget(!showBudget)}
+            className="flex items-center gap-2 w-full text-sm font-semibold mb-0"
+            style={{ color: showBudget ? "#39ff14" : "#6b8096" }}>
+            <Wallet size={14} style={{ color: "#39ff14" }} />
+            Monthly Budget
+            <span className="ml-auto text-xs">{showBudget ? "▲ Hide" : "▼ Set budgets"}</span>
+          </button>
+          <AnimatePresence>
+            {showBudget && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden">
+                <div className="mt-3 space-y-3">
+                  {Object.entries(CATEGORY_META).map(([cat, cfg]) => {
+                    const budget = budgets[cat] || 0;
+                    const spent = filteredExpenses.filter((e) => e.category === cat).reduce((s, e) => s + e.amount, 0);
+                    const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
+                    const over = budget > 0 && spent > budget;
+                    return (
+                      <div key={cat}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs" style={{ color: cfg.color }}>{cfg.icon} {t(cfg.labelKey)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs" style={{ color: over ? "#ff0080" : "#6b8096" }}>{currencyFormat(spent)} / </span>
+                            <input type="number" value={editBudget[cat] ?? (budget || "")}
+                              onChange={(e) => setEditBudget((prev) => ({ ...prev, [cat]: e.target.value }))}
+                              onBlur={(e) => { saveBudget(cat, e.target.value); setEditBudget((prev) => { const n = { ...prev }; delete n[cat]; return n; }); }}
+                              placeholder="budget"
+                              className="w-20 px-2 py-0.5 rounded text-xs text-right"
+                              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e2e8f0" }}
+                            />
+                          </div>
+                        </div>
+                        {budget > 0 && (
+                          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                            <div className="h-full rounded-full transition-all"
+                              style={{ width: `${pct}%`, background: over ? "#ff0080" : pct > 80 ? "#ffff00" : cfg.color }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-gray-600">Budgets apply to the selected period. Click amount to edit, press Tab/Enter to save.</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="glass-card p-4">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp size={14} style={{ color: "#ff6600" }} />
@@ -263,9 +347,14 @@ export default function ExpensesPage() {
                     <span className="text-lg w-7 text-center">{cfg.icon}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-200 truncate">{exp.note}</p>
-                      <p className="text-xs" style={{ color: cfg.color }}>{label} · {exp.date}</p>
+                      <p className="text-xs" style={{ color: cfg.color }}>{label} · {exp.date}{exp.shared ? <span style={{ color: "#39ff14" }}> · split/{exp.splitCount}</span> : ""}</p>
                     </div>
-                    <span className="font-bold text-sm text-gray-200">${exp.amount.toFixed(2)}</span>
+                    <div className="text-right">
+                      <span className="font-bold text-sm text-gray-200">{currencyFormat(exp.amount)}</span>
+                      {exp.shared && exp.splitCount && (
+                        <p className="text-xs" style={{ color: "#39ff14" }}>your share: {currencyFormat(exp.amount / exp.splitCount)}</p>
+                      )}
+                    </div>
                     <button onClick={() => deleteExpense(exp.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors">
                       <Trash2 size={13} />
                     </button>
